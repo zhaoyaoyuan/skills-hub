@@ -72,7 +72,7 @@ const OpenSkillsInstallModal = ({
               <ul className="space-y-1 text-xs text-gray-700 dark:text-gray-300">
                 <li>1. 安装 Node.js: <a href="https://nodejs.org/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">nodejs.org</a></li>
                 <li>2. 安装 OpenSkills: <code>npm install -g openskills</code></li>
-                <li>3. 确保终端可以执行 <code>npx openskills --version</code></li>
+                <li>3. 确保终端可以执行 <code>openskills --version</code></li>
               </ul>
             </div>
 

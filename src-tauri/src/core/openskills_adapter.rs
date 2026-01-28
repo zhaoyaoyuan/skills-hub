@@ -42,12 +42,22 @@ impl OpenSkillsAdapter {
     /// install_skill("anthropics/skills")?;
     /// install_skill("./local-skill")?;
     /// ```
+    ///
+    /// # 说明
+    /// 使用 --universal 参数并在用户主目录中执行,
+    /// 确保技能安装到 ~/.agent/skills/ 而不是 ./.agent/skills/
     pub fn install_skill(source: &str) -> Result<()> {
-        let mut cmd = Command::new("npx");
-        cmd.args(&["openskills", "install", source]);
+        use std::env;
 
-        // 始终使用 --universal 确保安装到 ~/.agent/skills/
-        cmd.arg("--universal");
+        // 获取用户主目录作为工作目录
+        let home_dir = env::var("HOME")
+            .or_else(|_| env::var("USERPROFILE"))
+            .context("Failed to determine home directory")?;
+
+        let mut cmd = Command::new("npx");
+        cmd.args(&["openskills", "install", source])
+            .arg("--universal")  // 使用 --universal 安装到 .agent/skills/
+            .current_dir(&home_dir);  // 在用户主目录执行,这样会安装到 ~/.agent/skills/
 
         let output = cmd.output()
             .context("Failed to run OpenSkills install")?;

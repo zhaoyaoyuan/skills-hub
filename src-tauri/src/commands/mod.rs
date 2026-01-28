@@ -607,17 +607,19 @@ pub fn get_managed_skills(store: State<'_, SkillStore>) -> Result<Vec<ManagedSki
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn delete_managed_skill(
+    app: tauri::AppHandle,
     store: State<'_, SkillStore>,
     skillId: String,
 ) -> Result<(), String> {
-    let store = store.inner().clone();
+    let store_clone = store.inner().clone();
+    let app_clone = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // 便于排查“按钮点了没反应”：确认前端确实触发了命令
+        // 便于排查"按钮点了没反应"：确认前端确实触发了命令
         println!("[delete_managed_skill] skillId={}", skillId);
 
         // 先删除已同步到各工具目录的副本/软链接
         // 注意：如果先删 skills 行，会触发 skill_targets cascade，导致无法再拿到 target_path
-        let targets = store.list_skill_targets(&skillId)?;
+        let targets = store_clone.list_skill_targets(&skillId)?;
 
         let mut remove_failures: Vec<String> = Vec::new();
         for target in targets {
@@ -626,13 +628,29 @@ pub async fn delete_managed_skill(
             }
         }
 
-        let record = store.get_skill_by_id(&skillId)?;
+        let record = store_clone.get_skill_by_id(&skillId)?;
         if let Some(skill) = record {
             let path = std::path::PathBuf::from(skill.central_path);
             if path.exists() {
                 std::fs::remove_dir_all(&path)?;
             }
-            store.delete_skill(&skillId)?;
+            store_clone.delete_skill(&skillId)?;
+        }
+
+        // 删除技能后重新同步 AGENTS.md
+        use std::env;
+        let skills_dir = resolve_central_repo_path(&app_clone, &store_clone)?;
+        let home_dir = env::var("HOME")
+            .or_else(|_| env::var("USERPROFILE"))
+            .context("Failed to determine home directory")?;
+        let agents_md_path = format!("{}/AGENTS.md", home_dir);
+
+        // 调用 OpenSkills 同步
+        if let Err(err) = OpenSkillsAdapter::sync_agents_md(&agents_md_path, &skills_dir) {
+            eprintln!("Warning: Failed to sync AGENTS.md after deleting skill: {}", err);
+            // 不阻塞删除操作,只记录错误
+        } else {
+            println!("Successfully synced AGENTS.md after deleting skill");
         }
 
         if !remove_failures.is_empty() {

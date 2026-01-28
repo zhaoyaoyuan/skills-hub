@@ -75,3 +75,28 @@ export type UpdateResultDto = {
   source_revision?: string | null
   updated_targets: string[]
 }
+
+// ============== Migration Types ==============
+
+export type MigrationCheck = {
+  needed: boolean
+  old_path: string
+  new_path: string
+  reason: 'OldPathExists' | 'BothPathsExist'
+}
+
+export type MigrationResult = {
+  old_path_existed: boolean
+  new_path_existed: boolean
+  migrated_count: number
+  skipped: boolean
+  message: string
+}
+
+// ============== OpenSkills Types ==============
+
+export type OpenSkillsSkill = {
+  name: string
+  description?: string | null
+  location: string
+}

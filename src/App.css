@@ -591,6 +591,18 @@
   transform: translateY(-1px);
 }
 
+.icon-btn.btn-danger {
+  color: #ef4444;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.icon-btn.btn-danger:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #dc2626;
+}
+
 .lang-btn {
   font-size: 12px;
   font-weight: 600;

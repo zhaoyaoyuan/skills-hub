@@ -65,6 +65,9 @@ export const resources = {
       deleteTitle: 'Remove skill?',
       deleteBody:
         'This will delete the managed record and remove synced links created by this app.',
+      deleteAllSkills: 'Delete All Skills',
+      deleteAllConfirm:
+        'Are you sure you want to delete all skills? This will remove all skill files, database records, and update AGENTS.md. This action cannot be undone.',
       cancel: 'Cancel',
       confirmRemove: 'Remove',
       maintenance: 'Maintenance',
@@ -285,6 +288,9 @@ export const resources = {
       linkLabel: 'link → {{target}}',
       deleteTitle: '确认移除？',
       deleteBody: '将删除托管记录，并清理由本应用创建的同步链接。',
+      deleteAllSkills: '删除所有技能',
+      deleteAllConfirm:
+        '确定要删除所有 {{count}} 个技能吗？此操作将：\n• 删除所有技能文件\n• 从数据库中移除\n• 更新 AGENTS.md\n\n此操作不可撤销！',
       cancel: '取消',
       confirmRemove: '确认移除',
       maintenance: '维护',

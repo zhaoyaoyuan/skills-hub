@@ -789,11 +789,11 @@ pub async fn check_openskills_available_cmd() -> Result<bool, String> {
 /// 通过 OpenSkills 安装技能并自动导入到 Skills Hub
 #[tauri::command]
 pub async fn openskills_install_cmd(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
     store: State<'_, SkillStore>,
     source: String,
 ) -> Result<(), String> {
-    use crate::core::skill_store::{SkillRecord, SkillStore as SkillStoreCore};
+    use crate::core::skill_store::SkillRecord;
     use std::path::Path;
     use uuid::Uuid;
 
@@ -842,7 +842,7 @@ pub async fn openskills_install_cmd(
             id: Uuid::new_v4().to_string(),
             name: skill_name.to_string(),
             source_type: "openskills".to_string(),
-            source_ref: Some(source.clone()),
+            source_ref: Some(skill_name.to_string()),  // 使用技能自己的名称而不是 source
             source_revision: None,
             central_path: skill_path.clone(),
             content_hash: content_hash.clone(),
@@ -919,6 +919,84 @@ pub async fn openskills_read_cmd(name: String) -> Result<String, String> {
 pub async fn openskills_remove_cmd(name: String) -> Result<(), String> {
     OpenSkillsAdapter::remove_skill(&name)
         .map_err(|e| e.to_string())
+}
+
+/// 删除所有技能
+#[tauri::command]
+pub async fn delete_all_skills_cmd(
+    app: tauri::AppHandle,
+    store: State<'_, SkillStore>,
+) -> Result<usize, String> {
+    let store_clone = store.inner().clone();
+    let app_clone = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        println!("[delete_all_skills] Starting to delete all skills");
+
+        // 获取所有技能
+        let skills = store_clone.list_skills()
+            .map_err(|e| e.to_string())?;
+
+        let skill_count = skills.len();
+        let mut deleted_count = 0;
+        let mut failed_skills: Vec<String> = Vec::new();
+
+        for skill in skills {
+            println!("[delete_all_skills] Deleting skill: {}", skill.name);
+
+            // 先删除已同步到各工具目录的副本/软链接
+            let targets = store_clone.list_skill_targets(&skill.id)
+                .map_err(|e| e.to_string())?;
+            for target in targets {
+                if let Err(err) = remove_path_any(&target.target_path) {
+                    eprintln!("  Failed to remove target {}: {}", target.target_path, err);
+                }
+            }
+
+            // 删除中央仓库中的技能目录
+            let path = std::path::PathBuf::from(&skill.central_path);
+            if path.exists() {
+                if let Err(err) = std::fs::remove_dir_all(&path) {
+                    eprintln!("  Failed to remove directory {}: {}", path.display(), err);
+                    failed_skills.push(skill.name.clone());
+                    continue;
+                }
+            }
+
+            // 从数据库删除
+            if let Err(err) = store_clone.delete_skill(&skill.id) {
+                eprintln!("  Failed to delete from database: {}", err);
+                failed_skills.push(skill.name.clone());
+                continue;
+            }
+
+            deleted_count += 1;
+        }
+
+        // 删除所有技能后重新同步 AGENTS.md
+        use std::env;
+        let skills_dir = resolve_central_repo_path(&app_clone, &store_clone)
+            .map_err(|e| e.to_string())?;
+        let home_dir = env::var("HOME")
+            .or_else(|_| env::var("USERPROFILE"))
+            .map_err(|e| format!("Failed to determine home directory: {}", e))?;
+        let agents_md_path = format!("{}/AGENTS.md", home_dir);
+
+        println!("[delete_all_skills] Syncing AGENTS.md");
+
+        let sync_result = OpenSkillsAdapter::sync_agents_md(&agents_md_path, &skills_dir);
+        if let Err(err) = sync_result {
+            eprintln!("  Failed to sync AGENTS.md: {}", err);
+        }
+
+        println!("[delete_all_skills] Deleted {} of {} skills", deleted_count, skill_count);
+
+        if !failed_skills.is_empty() {
+            eprintln!("Failed to delete {} skills: {:?}", failed_skills.len(), failed_skills);
+        }
+
+        Ok(deleted_count)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

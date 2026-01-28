@@ -509,6 +509,32 @@ function App() {
     if (!loading) setShowSettingsModal(false)
   }, [loading])
 
+  const handleDeleteAllSkills = useCallback(async () => {
+    // 确认对话框
+    const confirmed = window.confirm(
+      `确定要删除所有 ${managedSkills.length} 个技能吗？\n\n此操作将:\n` +
+      `• 删除所有技能文件\n` +
+      `• 从数据库中移除\n` +
+      `• 更新 AGENTS.md\n\n此操作不可撤销！`
+    )
+
+    if (!confirmed) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const deletedCount = await invokeTauri<number>('delete_all_skills_cmd')
+
+      setSuccessToastMessage(`成功删除 ${deletedCount} 个技能`)
+      await loadManagedSkills()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [invokeTauri, loadManagedSkills, managedSkills.length])
+
   const handleThemeChange = useCallback(
     (nextTheme: 'system' | 'light' | 'dark') => {
       setThemePreference(nextTheme)
@@ -1050,6 +1076,17 @@ function App() {
   }
 
   const handleDeleteManaged = async (skill: ManagedSkill) => {
+    // 确保这个函数只能从确认对话框调用
+    // 如果 pendingDeleteId 与要删除的技能不匹配,说明调用链有问题
+    if (pendingDeleteId !== skill.id) {
+      console.error('[handleDeleteManaged] Security check failed: pendingDeleteId does not match skill.id', {
+        pendingDeleteId,
+        skillId: skill.id
+      })
+      setError('删除操作必须通过确认对话框进行')
+      return
+    }
+
     setLoading(true)
     setLoadingStartAt(Date.now())
     setActionMessage(t('actions.removing', { name: skill.name }))
@@ -1271,19 +1308,69 @@ function App() {
       await loadManagedSkills()
 
       // 5. 同步到已安装的工具
-      if (toolStatus && toolStatus.installed.length > 0) {
-        const installedToolIds = toolStatus.installed
-          .filter((id) => isInstalled(id))
-          .filter((id) => id !== 'openskills') // 排除 OpenSkills 本身
+      // 等待一小段时间确保技能列表已更新
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
-        if (installedToolIds.length > 0) {
-          setActionMessage(t('actions.syncing'))
-          await handleSyncAllManagedToTools(installedToolIds)
-        }
+      // 重新获取最新的技能列表和工具状态
+      const latestSkills = await invokeTauri<ManagedSkill[]>('get_managed_skills')
+      console.log('[OpenSkills Install] Latest skills count:', latestSkills.length)
+
+      if (latestSkills.length === 0) {
+        console.log('[OpenSkills Install] No skills to sync')
+        setSuccessToastMessage('技能安装成功!')
+        setShowOpenSkillsModal(false)
+        return
       }
 
-      // 6. 显示成功消息
-      setSuccessToastMessage('技能安装成功!')
+      try {
+        const currentToolStatus = await invokeTauri<ToolStatusDto>('get_tool_status')
+        const installedToolIds = currentToolStatus.installed
+          .filter((id) => id !== 'openskills') // 排除 OpenSkills 本身
+
+        console.log('[OpenSkills Install] Tools to sync:', installedToolIds)
+
+        if (installedToolIds.length > 0) {
+          setActionMessage(`正在同步 ${latestSkills.length} 个技能到 ${installedToolIds.length} 个工具...`)
+
+          // 直接执行同步逻辑
+          setLoading(true)
+          try {
+            for (let si = 0; si < latestSkills.length; si++) {
+              const skill = latestSkills[si]
+              for (let ti = 0; ti < installedToolIds.length; ti++) {
+                const toolId = installedToolIds[ti]
+                const toolLabel = tools.find((t) => t.id === toolId)?.label ?? toolId
+                console.log(`[OpenSkills Install] Syncing ${skill.name} -> ${toolLabel}`)
+                try {
+                  await invokeTauri('sync_skill_to_tool', {
+                    sourcePath: skill.central_path,
+                    skillId: skill.id,
+                    tool: toolId,
+                    name: skill.name,
+                  })
+                } catch (err) {
+                  const raw = err instanceof Error ? err.message : String(err)
+                  console.error(`[OpenSkills Install] Failed to sync ${skill.name} -> ${toolLabel}:`, raw)
+                  // 继续同步其他技能
+                }
+              }
+            }
+            setSuccessToastMessage(`技能安装成功!已同步到 ${installedToolIds.length} 个工具`)
+            // 重新加载技能列表以更新界面上的同步状态
+            await loadManagedSkills()
+          } finally {
+            setLoading(false)
+          }
+        } else {
+          console.log('[OpenSkills Install] No installed tools to sync')
+          setSuccessToastMessage('技能安装成功!')
+        }
+      } catch (err) {
+        console.warn('[OpenSkills Install] Failed to sync tools:', err)
+        setSuccessToastMessage('技能安装成功!(同步未完成)')
+      }
+
+      // 6. 关闭模态框
       setShowOpenSkillsModal(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -1291,7 +1378,7 @@ function App() {
       setOpenSkillsLoading(false)
       setActionMessage(null)
     }
-  }, [invokeTauri, loadManagedSkills, toolStatus, isInstalled, handleSyncAllManagedToTools, t])
+  }, [invokeTauri, loadManagedSkills, isInstalled, handleSyncAllManagedToTools, t])
 
   const handleOpenSkillsClick = useCallback(() => {
     setShowOpenSkillsModal(true)
@@ -1318,6 +1405,8 @@ function App() {
         onToggleLanguage={toggleLanguage}
         onOpenSettings={handleOpenSettings}
         onOpenAdd={handleOpenAdd}
+        onDeleteAll={managedSkills.length > 0 ? handleDeleteAllSkills : undefined}
+        skillCount={managedSkills.length}
         t={t}
       />
 

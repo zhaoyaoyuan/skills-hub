@@ -405,6 +405,27 @@ pub fn update_managed_skill_from_source<R: tauri::Runtime>(
         }
         copy_dir_recursive(&source_path, &staging_dir)
             .with_context(|| format!("copy {:?} -> {:?}", source_path, staging_dir))?;
+    } else if record.source_type == "openskills" {
+        // 对于 OpenSkills 技能,直接从 ~/.agent/skills/ 复制
+        // OpenSkills 技能由 OpenSkills CLI 管理,我们只需要复制最新版本
+
+        // 使用技能名称作为目录名
+        let skill_name = &record.name;
+
+        // OpenSkills 技能直接安装在 ~/.agent/skills/ 目录下
+        let skills_dir = std::path::PathBuf::from(std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string()))
+            .join(".agent")
+            .join("skills")
+            .join(skill_name);
+
+        if !skills_dir.exists() {
+            anyhow::bail!("openskills skill directory not found: {:?}. Please ensure the skill is still installed.", skills_dir);
+        }
+
+        copy_dir_recursive(&skills_dir, &staging_dir)
+            .with_context(|| format!("copy {:?} -> {:?}", skills_dir, staging_dir))?;
     } else {
         anyhow::bail!("unsupported source_type for update: {}", record.source_type);
     }

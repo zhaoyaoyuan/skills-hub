@@ -83,6 +83,7 @@ pub fn run() {
             commands::import_existing_skill,
             commands::get_managed_skills,
             commands::delete_managed_skill,
+            commands::delete_all_skills_cmd,
             commands::check_migration_needed_cmd,
             commands::migrate_skills_cmd,
             commands::get_storage_path_cmd,

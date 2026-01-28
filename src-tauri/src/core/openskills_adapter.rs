@@ -300,7 +300,7 @@ impl OpenSkillsAdapter {
         }
 
         // 解析输出（假设是 JSON 或结构化文本）
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let _stdout = String::from_utf8_lossy(&output.stdout);
 
         // TODO: 根据实际输出格式解析
         // 目前返回空向量，实际实现需要解析 OpenSkills 的输出格式

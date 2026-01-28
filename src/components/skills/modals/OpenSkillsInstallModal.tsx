@@ -64,6 +64,18 @@ const OpenSkillsInstallModal = ({
               OpenSkills 是一个通用的 AI 编程代理技能加载器。输入 GitHub 仓库或本地路径即可安装技能。
             </p>
 
+            {/* Requirements */}
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
+              <h3 className="font-medium text-sm mb-2 text-amber-900 dark:text-amber-100">
+                ⚠️ 使用前准备
+              </h3>
+              <ul className="space-y-1 text-xs text-gray-700 dark:text-gray-300">
+                <li>1. 安装 Node.js: <a href="https://nodejs.org/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">nodejs.org</a></li>
+                <li>2. 安装 OpenSkills: <code>npm install -g openskills</code></li>
+                <li>3. 确保终端可以执行 <code>npx openskills --version</code></li>
+              </ul>
+            </div>
+
             {/* Info Box */}
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
               <h3 className="font-medium text-sm mb-2 text-blue-900 dark:text-blue-100">

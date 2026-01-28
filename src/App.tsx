@@ -1249,9 +1249,15 @@ function App() {
     setOpenSkillsLoading(true)
     try {
       // 1. 检查 OpenSkills 可用性
-      const available = await invokeTauri<boolean>('check_openskills_available_cmd')
-      if (!available) {
-        setError('未检测到 OpenSkills。请安装: npm install -g openskills')
+      try {
+        const available = await invokeTauri<boolean>('check_openskills_available_cmd')
+        if (!available) {
+          setError('未检测到 OpenSkills。请安装: npm install -g openskills')
+          return
+        }
+      } catch (checkError) {
+        // 显示详细的错误信息
+        setError(checkError instanceof Error ? checkError.message : String(checkError))
         return
       }
 

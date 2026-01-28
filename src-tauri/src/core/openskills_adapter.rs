@@ -26,10 +26,29 @@ impl OpenSkillsAdapter {
     pub fn is_available() -> Result<bool> {
         let output = Command::new("npx")
             .args(&["openskills", "--version"])
-            .output()
-            .context("Failed to check OpenSkills availability")?;
+            .output();
 
-        Ok(output.status.success())
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    Ok(true)
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    anyhow::bail!("OpenSkills command failed: {}", stderr);
+                }
+            }
+            Err(e) => {
+                // 提供更详细的错误信息和解决方案
+                anyhow::bail!(
+                    "无法执行 npx 命令。请确保:\n\
+                     1. Node.js 已安装 (https://nodejs.org/)\n\
+                     2. OpenSkills 已安装: npm install -g openskills\n\
+                     3. 系统环境变量 PATH 包含 npx\n\
+                     \n详细错误: {}",
+                    e
+                );
+            }
+        }
     }
 
     /// 安装技能（始终使用 --universal）

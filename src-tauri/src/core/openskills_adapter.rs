@@ -64,31 +64,27 @@ impl OpenSkillsAdapter {
     /// 同步 AGENTS.md
     ///
     /// # 参数
-    /// * `output_path` - 可选的输出文件路径（默认为 AGENTS.md）
+    /// * `output_path` - 输出文件路径（应该是 ~/AGENTS.md）
+    /// * `skills_dir` - 技能存储目录（用作工作目录）
     ///
     /// # 返回
     /// 生成的 AGENTS.md 文件路径
-    pub fn sync_agents_md(output_path: Option<&str>) -> Result<String> {
-        // 获取技能存储路径
-        let skills_dir = crate::core::central_repo::get_central_repo_path()?;
-
+    pub fn sync_agents_md(output_path: &str, skills_dir: &std::path::Path) -> Result<String> {
         let mut cmd = Command::new("npx");
         cmd.args(&["openskills", "sync", "-y"])
-            .current_dir(&skills_dir); // 设置工作目录为技能存储目录
+            .arg("-o")
+            .arg(output_path)
+            .current_dir(skills_dir); // 设置工作目录为技能存储目录
 
-        if let Some(path) = output_path {
-            cmd.args(&["-o", path]);
-        }
-
-        let output = cmd.output()
+        let exec_result = cmd.output()
             .context("Failed to run OpenSkills sync")?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
+        if !exec_result.status.success() {
+            let stderr = String::from_utf8_lossy(&exec_result.stderr);
             anyhow::bail!("OpenSkills sync failed: {}", stderr);
         }
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stdout = String::from_utf8_lossy(&exec_result.stdout);
         let path = stdout.trim().to_string();
 
         log::info!("OpenSkills sync succeeded: {}", path);

@@ -777,8 +777,26 @@ pub async fn openskills_install_cmd(source: String) -> Result<(), String> {
 
 /// 同步 AGENTS.md
 #[tauri::command]
-pub async fn openskills_sync_cmd(output_path: Option<String>) -> Result<String, String> {
-    OpenSkillsAdapter::sync_agents_md(output_path.as_deref())
+pub async fn openskills_sync_cmd(
+    app: tauri::AppHandle,
+    store: State<'_, SkillStore>,
+    output_path: Option<String>,
+) -> Result<String, String> {
+    use std::env;
+
+    // 获取技能存储路径（用作工作目录）
+    let skills_dir = resolve_central_repo_path(&app, &store)
+        .map_err(|e| e.to_string())?;
+
+    // 获取用户主目录并构建默认输出路径
+    let home_dir = env::var("HOME")
+        .or_else(|_| env::var("USERPROFILE"))
+        .map_err(|e| format!("Failed to determine home directory: {}", e))?;
+
+    // 默认输出到用户主目录的 AGENTS.md
+    let output = output_path.unwrap_or_else(|| format!("{}/AGENTS.md", home_dir));
+
+    OpenSkillsAdapter::sync_agents_md(&output, &skills_dir)
         .map_err(|e| e.to_string())
 }
 

@@ -4,6 +4,7 @@ pub mod content_hash;
 pub mod git_fetcher;
 pub mod github_search;
 pub mod installer;
+pub mod migration;
 pub mod onboarding;
 pub mod skill_store;
 pub mod sync_engine;

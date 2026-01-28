@@ -22,6 +22,39 @@ pub struct OpenSkillsList {
 }
 
 impl OpenSkillsAdapter {
+    /// 查找 node 命令的绝对路径
+    ///
+    /// GUI 应用无法访问 shell 环境变量，所以需要手动查找常见的安装位置
+    fn find_node_path() -> Option<String> {
+        let common_paths = vec![
+            "/opt/homebrew/bin/node",         // Homebrew (Apple Silicon)
+            "/usr/local/bin/node",            // Homebrew (Intel)
+            "/opt/homebrew/Caskroom/nodejs", // Node.js via Homebrew
+            "~/.nvm/versions/node",          // NVM 安装
+        ];
+
+        for path in common_paths {
+            if std::path::Path::new(path).exists() {
+                return Some(path.to_string());
+            }
+        }
+
+        // 尝试通过 shell 查找（仅用于开发模式）
+        if let Ok(output) = std::process::Command::new("which")
+            .arg("node")
+            .output()
+        {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    return Some(path);
+                }
+            }
+        }
+
+        None
+    }
+
     /// 查找 openskills 命令的绝对路径
     ///
     /// GUI 应用无法访问 shell 环境变量，所以需要手动查找常见的安装位置
@@ -58,10 +91,30 @@ impl OpenSkillsAdapter {
 
     /// 检查 OpenSkills 是否可用
     pub fn is_available() -> Result<bool> {
-        // 尝试查找 openskills 绝对路径
-        let openskills_cmd = Self::find_openskills_path().unwrap_or_else(|| "openskills".to_string());
+        // 同时检查 node 和 openskills
+        let node_path = Self::find_node_path();
+        let openskills_path = Self::find_openskills_path();
 
-        let output = Command::new(&openskills_cmd)
+        if node_path.is_none() {
+            anyhow::bail!(
+                "无法找到 Node.js。\n\
+                 请确保通过 Homebrew 安装: brew install node"
+            );
+        }
+
+        if openskills_path.is_none() {
+            anyhow::bail!(
+                "无法找到 openskills 命令。\n\
+                 请确保安装: npm install -g openskills"
+            );
+        }
+
+        // 使用 node 直接运行 openskills，避免 PATH 问题
+        let node_cmd = node_path.unwrap();
+        let openskills_cmd = openskills_path.unwrap();
+
+        let output = Command::new(&node_cmd)
+            .arg(&openskills_cmd)
             .arg("--version")
             .output();
 
@@ -75,13 +128,8 @@ impl OpenSkillsAdapter {
                 }
             }
             Err(e) => {
-                // 提供更详细的错误信息和解决方案
                 anyhow::bail!(
-                    "无法执行 openskills 命令 ({})。\n\
-                     请确保:\n\
-                     1. Node.js 已通过 Homebrew 安装: brew install node\n\
-                     2. OpenSkills 已安装: npm install -g openskills\n\
-                     \n详细错误: {}",
+                    "无法执行 openskills: node {} --version\n详细错误: {}",
                     openskills_cmd, e
                 );
             }
@@ -105,24 +153,27 @@ impl OpenSkillsAdapter {
     pub fn install_skill(source: &str) -> Result<()> {
         use std::env;
 
-        // 获取 openskills 绝对路径
-        let openskills_cmd = Self::find_openskills_path().unwrap_or_else(|| "openskills".to_string());
+        // 获取 node 和 openskills 绝对路径
+        let node_cmd = Self::find_node_path().ok_or_else(|| anyhow::anyhow!("无法找到 Node.js"))?;
+        let openskills_cmd = Self::find_openskills_path().ok_or_else(|| anyhow::anyhow!("无法找到 openskills"))?;
 
         // 获取用户主目录作为工作目录
         let home_dir = env::var("HOME")
             .or_else(|_| env::var("USERPROFILE"))
             .context("Failed to determine home directory")?;
 
-        let mut cmd = Command::new(&openskills_cmd);
-        cmd.args(&["install", source])
+        // 使用 node 直接运行 openskills，避免 PATH 问题
+        let mut cmd = Command::new(&node_cmd);
+        cmd.arg(&openskills_cmd)
+            .args(&["install", source])
             .arg("--universal")  // 使用 --universal 安装到 .agent/skills/
             .arg("--yes")         // 跳过交互式选择,自动安装所有找到的技能
             .current_dir(&home_dir);  // 在用户主目录执行,这样会安装到 ~/.agent/skills/
 
         // 打印完整命令用于调试
         let full_command = format!(
-            "cd {} && {} install {} --universal --yes",
-            home_dir, openskills_cmd, source
+            "cd {} && {} {} install {} --universal --yes",
+            home_dir, node_cmd, openskills_cmd, source
         );
         println!("🔧 Executing OpenSkills command: {}", full_command);
         log::info!("Executing: {}", full_command);
@@ -148,19 +199,23 @@ impl OpenSkillsAdapter {
     /// # 返回
     /// 生成的 AGENTS.md 文件路径
     pub fn sync_agents_md(output_path: &str, skills_dir: &std::path::Path) -> Result<String> {
-        // 获取 openskills 绝对路径
-        let openskills_cmd = Self::find_openskills_path().unwrap_or_else(|| "openskills".to_string());
+        // 获取 node 和 openskills 绝对路径
+        let node_cmd = Self::find_node_path().ok_or_else(|| anyhow::anyhow!("无法找到 Node.js"))?;
+        let openskills_cmd = Self::find_openskills_path().ok_or_else(|| anyhow::anyhow!("无法找到 openskills"))?;
 
-        let mut cmd = Command::new(&openskills_cmd);
-        cmd.args(&["sync", "-y"])
+        // 使用 node 直接运行 openskills，避免 PATH 问题
+        let mut cmd = Command::new(&node_cmd);
+        cmd.arg(&openskills_cmd)
+            .args(&["sync", "-y"])
             .arg("-o")
             .arg(output_path)
             .current_dir(skills_dir); // 设置工作目录为技能存储目录
 
         // 打印完整命令用于调试
         let full_command = format!(
-            "cd {} && {} sync -y -o {}",
+            "cd {} && {} {} sync -y -o {}",
             skills_dir.display(),
+            node_cmd,
             openskills_cmd,
             output_path
         );

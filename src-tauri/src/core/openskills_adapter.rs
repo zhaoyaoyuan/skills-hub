@@ -57,7 +57,16 @@ impl OpenSkillsAdapter {
         let mut cmd = Command::new("npx");
         cmd.args(&["openskills", "install", source])
             .arg("--universal")  // 使用 --universal 安装到 .agent/skills/
+            .arg("--yes")         // 跳过交互式选择,自动安装所有找到的技能
             .current_dir(&home_dir);  // 在用户主目录执行,这样会安装到 ~/.agent/skills/
+
+        // 打印完整命令用于调试
+        let full_command = format!(
+            "cd {} && npx openskills install {} --universal --yes",
+            home_dir, source
+        );
+        println!("🔧 Executing OpenSkills command: {}", full_command);
+        log::info!("Executing: {}", full_command);
 
         let output = cmd.output()
             .context("Failed to run OpenSkills install")?;
@@ -86,6 +95,15 @@ impl OpenSkillsAdapter {
             .arg(output_path)
             .current_dir(skills_dir); // 设置工作目录为技能存储目录
 
+        // 打印完整命令用于调试
+        let full_command = format!(
+            "cd {} && npx openskills sync -y -o {}",
+            skills_dir.display(),
+            output_path
+        );
+        println!("🔧 Executing OpenSkills command: {}", full_command);
+        log::info!("Executing: {}", full_command);
+
         let exec_result = cmd.output()
             .context("Failed to run OpenSkills sync")?;
 
@@ -113,7 +131,12 @@ impl OpenSkillsAdapter {
 
         let skills_dir = std::path::PathBuf::from(home_dir).join(".agent").join("skills");
 
+        // 打印扫描路径
+        println!("🔍 Scanning for skills in: {}", skills_dir.display());
+        log::info!("Scanning skills directory: {}", skills_dir.display());
+
         if !skills_dir.exists() {
+            println!("⚠️  Skills directory does not exist: {}", skills_dir.display());
             return Ok(Vec::new());
         }
 
@@ -134,6 +157,7 @@ impl OpenSkillsAdapter {
 
                 // 跳过隐藏目录和系统目录
                 if !name.starts_with('.') && name != "node_modules" {
+                    println!("  ✓ Found skill: {}", name);
                     skills.push(path.to_string_lossy().to_string());
                 }
             }

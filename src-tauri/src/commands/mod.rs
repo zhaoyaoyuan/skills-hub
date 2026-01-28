@@ -793,7 +793,9 @@ pub async fn openskills_install_cmd(
     store: State<'_, SkillStore>,
     source: String,
 ) -> Result<(), String> {
+    use crate::core::skill_store::{SkillRecord, SkillStore as SkillStoreCore};
     use std::path::Path;
+    use uuid::Uuid;
 
     // 1. 安装技能
     OpenSkillsAdapter::install_skill(&source)
@@ -810,7 +812,7 @@ pub async fn openskills_install_cmd(
         .map(|s| s.name)
         .collect::<std::collections::HashSet<_>>();
 
-    // 4. 导入每个新技能到 Skills Hub 数据库
+    // 4. 直接注册技能到数据库（因为它们已经在中央仓库中了）
     let store = store.inner().clone();
     for skill_path in installed_skills {
         let path = Path::new(&skill_path);
@@ -830,13 +832,34 @@ pub async fn openskills_install_cmd(
             continue;
         }
 
-        // 导入技能
-        match install_local_skill(&app, &store, path, None) {
+        // 计算内容哈希
+        let content_hash = crate::core::installer::compute_content_hash(path);
+
+        let now = crate::core::installer::now_ms();
+
+        // 创建技能记录
+        let record = SkillRecord {
+            id: Uuid::new_v4().to_string(),
+            name: skill_name.to_string(),
+            source_type: "openskills".to_string(),
+            source_ref: Some(source.clone()),
+            source_revision: None,
+            central_path: skill_path.clone(),
+            content_hash: content_hash.clone(),
+            created_at: now,
+            updated_at: now,
+            last_sync_at: None,
+            last_seen_at: now,
+            status: "ok".to_string(),
+        };
+
+        // 直接插入数据库
+        match store.upsert_skill(&record) {
             Ok(_) => {
-                log::info!("Successfully imported skill: {}", skill_name);
+                log::info!("Successfully registered skill: {}", skill_name);
             }
             Err(err) => {
-                eprintln!("Failed to import skill '{}': {}", skill_name, err);
+                eprintln!("Failed to register skill '{}': {}", skill_name, err);
                 // 不阻塞,继续导入其他技能
             }
         }

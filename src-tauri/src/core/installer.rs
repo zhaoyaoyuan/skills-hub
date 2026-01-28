@@ -293,7 +293,7 @@ fn looks_like_github_shorthand(input: &str) -> bool {
     }
 }
 
-fn now_ms() -> i64 {
+pub fn now_ms() -> i64 {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .unwrap_or_default();
@@ -316,7 +316,7 @@ fn derive_name_from_repo_url(repo_url: &str) -> String {
     }
 }
 
-fn compute_content_hash(path: &Path) -> Option<String> {
+pub fn compute_content_hash(path: &Path) -> Option<String> {
     if should_compute_content_hash() {
         hash_dir(path).ok()
     } else {

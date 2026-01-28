@@ -1261,18 +1261,31 @@ function App() {
       // 3. 同步 AGENTS.md
       await invokeTauri('openskills_sync_cmd', {})
 
-      // 4. 显示成功消息
+      // 4. 重新加载技能列表
+      await loadManagedSkills()
+
+      // 5. 同步到已安装的工具
+      if (toolStatus && toolStatus.installed.length > 0) {
+        const installedToolIds = toolStatus.installed
+          .filter((id) => isInstalled(id))
+          .filter((id) => id !== 'openskills') // 排除 OpenSkills 本身
+
+        if (installedToolIds.length > 0) {
+          setActionMessage(t('actions.syncing'))
+          await handleSyncAllManagedToTools(installedToolIds)
+        }
+      }
+
+      // 6. 显示成功消息
       setSuccessToastMessage('技能安装成功!')
       setShowOpenSkillsModal(false)
-
-      // 5. 重新加载技能列表
-      await loadManagedSkills()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setOpenSkillsLoading(false)
+      setActionMessage(null)
     }
-  }, [invokeTauri, loadManagedSkills])
+  }, [invokeTauri, loadManagedSkills, toolStatus, isInstalled, handleSyncAllManagedToTools, t])
 
   const handleOpenSkillsClick = useCallback(() => {
     setShowOpenSkillsModal(true)

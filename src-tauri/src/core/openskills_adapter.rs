@@ -32,7 +32,7 @@ impl OpenSkillsAdapter {
         Ok(output.status.success())
     }
 
-    /// 安装技能（始终使用 --universal）
+    /// 安装技能（始终使用 --global 安装到 ~/.agent/skills/）
     ///
     /// # 参数
     /// * `source` - 技能来源（GitHub 仓库、本地路径等）
@@ -46,8 +46,9 @@ impl OpenSkillsAdapter {
         let mut cmd = Command::new("npx");
         cmd.args(&["openskills", "install", source]);
 
-        // 始终使用 --universal 确保安装到 ~/.agent/skills/
-        cmd.arg("--universal");
+        // 使用 --global 确保安装到 ~/.agent/skills/
+        // --universal 会安装到 ./.agent/skills/ (项目本地)
+        cmd.arg("--global");
 
         let output = cmd.output()
             .context("Failed to run OpenSkills install")?;

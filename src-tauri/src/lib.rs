@@ -82,7 +82,17 @@ pub fn run() {
             commands::search_github,
             commands::import_existing_skill,
             commands::get_managed_skills,
-            commands::delete_managed_skill
+            commands::delete_managed_skill,
+            commands::check_migration_needed_cmd,
+            commands::migrate_skills_cmd,
+            commands::get_storage_path_cmd,
+            commands::check_openskills_available_cmd,
+            commands::openskills_install_cmd,
+            commands::openskills_sync_cmd,
+            commands::openskills_list_cmd,
+            commands::openskills_update_cmd,
+            commands::openskills_read_cmd,
+            commands::openskills_remove_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

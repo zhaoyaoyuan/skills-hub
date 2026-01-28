@@ -6,6 +6,7 @@ pub mod github_search;
 pub mod installer;
 pub mod migration;
 pub mod onboarding;
+pub mod openskills_adapter;
 pub mod skill_store;
 pub mod sync_engine;
 pub mod temp_cleanup;

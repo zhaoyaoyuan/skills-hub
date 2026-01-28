@@ -16,6 +16,7 @@ use crate::core::installer::{
 };
 use crate::core::migration::{check_migration_needed, migrate_to_agent_skills, MigrationCheck};
 use crate::core::onboarding::{build_onboarding_plan, OnboardingPlan};
+use crate::core::openskills_adapter::OpenSkillsAdapter;
 use crate::core::skill_store::{SkillStore, SkillTargetRecord};
 use crate::core::sync_engine::{
     copy_dir_recursive, sync_dir_for_tool_with_overwrite, sync_dir_hybrid, SyncMode,
@@ -756,6 +757,57 @@ pub async fn get_storage_path_cmd(
     let path = resolve_central_repo_path(&app, store)
         .map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
+}
+
+// ============== OpenSkills Commands ==============
+
+/// 检查 OpenSkills 是否可用
+#[tauri::command]
+pub async fn check_openskills_available_cmd() -> Result<bool, String> {
+    OpenSkillsAdapter::is_available()
+        .map_err(|e| e.to_string())
+}
+
+/// 通过 OpenSkills 安装技能
+#[tauri::command]
+pub async fn openskills_install_cmd(source: String) -> Result<(), String> {
+    OpenSkillsAdapter::install_skill(&source)
+        .map_err(|e| e.to_string())
+}
+
+/// 同步 AGENTS.md
+#[tauri::command]
+pub async fn openskills_sync_cmd(output_path: Option<String>) -> Result<String, String> {
+    OpenSkillsAdapter::sync_agents_md(output_path.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+/// 列出 OpenSkills 技能
+#[tauri::command]
+pub async fn openskills_list_cmd() -> Result<Vec<crate::core::openskills_adapter::OpenSkillsSkill>, String> {
+    OpenSkillsAdapter::list_skills()
+        .map_err(|e| e.to_string())
+}
+
+/// 更新 OpenSkills 技能
+#[tauri::command]
+pub async fn openskills_update_cmd(names: Option<Vec<String>>) -> Result<(), String> {
+    OpenSkillsAdapter::update_skills(names)
+        .map_err(|e| e.to_string())
+}
+
+/// 读取 OpenSkills 技能内容
+#[tauri::command]
+pub async fn openskills_read_cmd(name: String) -> Result<String, String> {
+    OpenSkillsAdapter::read_skill(&name)
+        .map_err(|e| e.to_string())
+}
+
+/// 移除 OpenSkills 技能
+#[tauri::command]
+pub async fn openskills_remove_cmd(name: String) -> Result<(), String> {
+    OpenSkillsAdapter::remove_skill(&name)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

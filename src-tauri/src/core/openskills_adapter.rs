@@ -22,9 +22,46 @@ pub struct OpenSkillsList {
 }
 
 impl OpenSkillsAdapter {
+    /// 查找 npx 的绝对路径
+    ///
+    /// GUI 应用无法访问 shell 环境变量，所以需要手动查找常见的安装位置
+    fn find_npx_path() -> Option<String> {
+        let common_paths = vec![
+            "/opt/homebrew/bin/npx",           // Homebrew (Apple Silicon)
+            "/usr/local/bin/npx",              // Homebrew (Intel)
+            "/opt/homebrew/Caskroom/nodejs",  // Node.js via Homebrew
+            "/usr/local/bin/node",             // Node.js 官方安装
+            "~/.nvm/versions/node",           // NVM 安装
+        ];
+
+        for path in common_paths {
+            if std::path::Path::new(path).exists() {
+                return Some(path.to_string());
+            }
+        }
+
+        // 尝试通过 shell 查找（仅用于开发模式）
+        if let Ok(output) = std::process::Command::new("which")
+            .arg("npx")
+            .output()
+        {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    return Some(path);
+                }
+            }
+        }
+
+        None
+    }
+
     /// 检查 OpenSkills 是否可用
     pub fn is_available() -> Result<bool> {
-        let output = Command::new("npx")
+        // 尝试查找 npx 绝对路径
+        let npx_cmd = Self::find_npx_path().unwrap_or_else(|| "npx".to_string());
+
+        let output = Command::new(&npx_cmd)
             .args(&["openskills", "--version"])
             .output();
 
@@ -40,12 +77,12 @@ impl OpenSkillsAdapter {
             Err(e) => {
                 // 提供更详细的错误信息和解决方案
                 anyhow::bail!(
-                    "无法执行 npx 命令。请确保:\n\
-                     1. Node.js 已安装 (https://nodejs.org/)\n\
+                    "无法执行 npx 命令 ({})。\n\
+                     请确保:\n\
+                     1. Node.js 已通过 Homebrew 安装: brew install node\n\
                      2. OpenSkills 已安装: npm install -g openskills\n\
-                     3. 系统环境变量 PATH 包含 npx\n\
                      \n详细错误: {}",
-                    e
+                    npx_cmd, e
                 );
             }
         }
@@ -68,12 +105,15 @@ impl OpenSkillsAdapter {
     pub fn install_skill(source: &str) -> Result<()> {
         use std::env;
 
+        // 获取 npx 绝对路径
+        let npx_cmd = Self::find_npx_path().unwrap_or_else(|| "npx".to_string());
+
         // 获取用户主目录作为工作目录
         let home_dir = env::var("HOME")
             .or_else(|_| env::var("USERPROFILE"))
             .context("Failed to determine home directory")?;
 
-        let mut cmd = Command::new("npx");
+        let mut cmd = Command::new(&npx_cmd);
         cmd.args(&["openskills", "install", source])
             .arg("--universal")  // 使用 --universal 安装到 .agent/skills/
             .arg("--yes")         // 跳过交互式选择,自动安装所有找到的技能
@@ -81,8 +121,8 @@ impl OpenSkillsAdapter {
 
         // 打印完整命令用于调试
         let full_command = format!(
-            "cd {} && npx openskills install {} --universal --yes",
-            home_dir, source
+            "cd {} && {} openskills install {} --universal --yes",
+            home_dir, npx_cmd, source
         );
         println!("🔧 Executing OpenSkills command: {}", full_command);
         log::info!("Executing: {}", full_command);
@@ -108,7 +148,10 @@ impl OpenSkillsAdapter {
     /// # 返回
     /// 生成的 AGENTS.md 文件路径
     pub fn sync_agents_md(output_path: &str, skills_dir: &std::path::Path) -> Result<String> {
-        let mut cmd = Command::new("npx");
+        // 获取 npx 绝对路径
+        let npx_cmd = Self::find_npx_path().unwrap_or_else(|| "npx".to_string());
+
+        let mut cmd = Command::new(&npx_cmd);
         cmd.args(&["openskills", "sync", "-y"])
             .arg("-o")
             .arg(output_path)
@@ -116,8 +159,9 @@ impl OpenSkillsAdapter {
 
         // 打印完整命令用于调试
         let full_command = format!(
-            "cd {} && npx openskills sync -y -o {}",
+            "cd {} && {} openskills sync -y -o {}",
             skills_dir.display(),
+            npx_cmd,
             output_path
         );
         println!("🔧 Executing OpenSkills command: {}", full_command);

@@ -10,12 +10,16 @@ import AddSkillModal from './components/skills/modals/AddSkillModal'
 import DeleteModal from './components/skills/modals/DeleteModal'
 import GitPickModal from './components/skills/modals/GitPickModal'
 import ImportModal from './components/skills/modals/ImportModal'
+import MigrationModal from './components/skills/modals/MigrationModal'
 import NewToolsModal from './components/skills/modals/NewToolsModal'
+import OpenSkillsInstallModal from './components/skills/modals/OpenSkillsInstallModal'
 import SettingsModal from './components/skills/modals/SettingsModal'
 import type {
   GitSkillCandidate,
   InstallResultDto,
   ManagedSkill,
+  MigrationCheck,
+  MigrationResult,
   OnboardingPlan,
   ToolOption,
   ToolStatusDto,
@@ -64,7 +68,14 @@ function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'updated' | 'name'>('updated')
-  const [addModalTab, setAddModalTab] = useState<'local' | 'git'>('git')
+  const [addModalTab, setAddModalTab] = useState<'local' | 'git' | 'openskills'>('git')
+
+  // OpenSkills 和迁移相关状态
+  const [showMigrationModal, setShowMigrationModal] = useState(false)
+  const [migrationCheck, setMigrationCheck] = useState<MigrationCheck | null>(null)
+  const [migrationLoading, setMigrationLoading] = useState(false)
+  const [showOpenSkillsModal, setShowOpenSkillsModal] = useState(false)
+  const [openskillsLoading, setOpenSkillsLoading] = useState(false)
 
   const isTauri =
     typeof window !== 'undefined' &&
@@ -300,6 +311,22 @@ function App() {
       void loadPlan()
     }
   }, [isTauri, loadPlan])
+
+  // 检查是否需要迁移
+  useEffect(() => {
+    if (!isTauri) return
+
+    invokeTauri<MigrationCheck | null>('check_migration_needed_cmd')
+      .then((check) => {
+        if (check) {
+          setMigrationCheck(check)
+          setShowMigrationModal(true)
+        }
+      })
+      .catch((err) => {
+        console.warn('Migration check failed:', err)
+      })
+  }, [isTauri, invokeTauri])
 
   useEffect(() => {
     if (!successToastMessage) return
@@ -1197,6 +1224,61 @@ function App() {
     [handleUpdateManaged],
   )
 
+  // OpenSkills 和迁移相关处理函数
+  const handleMigrate = useCallback(async () => {
+    if (!migrationCheck) return
+
+    setMigrationLoading(true)
+    try {
+      const result = await invokeTauri<MigrationResult>('migrate_skills_cmd')
+
+      // 显示成功消息
+      setSuccessToastMessage(`迁移完成: ${result.message}`)
+      setShowMigrationModal(false)
+
+      // 重新加载技��列表
+      await loadManagedSkills()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setMigrationLoading(false)
+    }
+  }, [migrationCheck, invokeTauri, loadManagedSkills])
+
+  const handleOpenSkillsInstall = useCallback(async (source: string) => {
+    setOpenSkillsLoading(true)
+    try {
+      // 1. 检查 OpenSkills 可用性
+      const available = await invokeTauri<boolean>('check_openskills_available_cmd')
+      if (!available) {
+        setError('未检测到 OpenSkills。请安装: npm install -g openskills')
+        return
+      }
+
+      // 2. 安装技能
+      await invokeTauri('openskills_install_cmd', { source })
+
+      // 3. 同步 AGENTS.md
+      await invokeTauri('openskills_sync_cmd', {})
+
+      // 4. 显示成功消息
+      setSuccessToastMessage('技能安装成功!')
+      setShowOpenSkillsModal(false)
+
+      // 5. 重新加载技能列表
+      await loadManagedSkills()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setOpenSkillsLoading(false)
+    }
+  }, [invokeTauri, loadManagedSkills])
+
+  const handleOpenSkillsClick = useCallback(() => {
+    setShowOpenSkillsModal(true)
+    setShowAddModal(false)
+  }, [])
+
   return (
     <div className="skills-app">
       <Toaster
@@ -1269,6 +1351,7 @@ function App() {
         onGitNameChange={setGitName}
         onSyncTargetChange={handleSyncTargetChange}
         onSubmit={addModalTab === 'local' ? handleCreateLocal : handleCreateGit}
+        onOpenSkillsClick={handleOpenSkillsClick}
         t={t}
       />
 
@@ -1336,6 +1419,24 @@ function App() {
         onToggleAll={handleToggleAllGitCandidates}
         onToggleCandidate={handleToggleGitCandidate}
         onInstall={handleInstallSelectedCandidates}
+        t={t}
+      />
+
+      <MigrationModal
+        open={showMigrationModal}
+        loading={migrationLoading}
+        oldPath={migrationCheck?.old_path || ''}
+        newPath={migrationCheck?.new_path || ''}
+        onRequestClose={() => setShowMigrationModal(false)}
+        onMigrate={handleMigrate}
+        t={t}
+      />
+
+      <OpenSkillsInstallModal
+        open={showOpenSkillsModal}
+        loading={openskillsLoading}
+        onRequestClose={() => setShowOpenSkillsModal(false)}
+        onInstall={handleOpenSkillsInstall}
         t={t}
       />
       </div>

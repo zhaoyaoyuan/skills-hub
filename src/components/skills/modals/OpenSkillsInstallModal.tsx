@@ -7,7 +7,7 @@ type OpenSkillsInstallModalProps = {
   loading: boolean
   onRequestClose: () => void
   onInstall: (source: string) => Promise<void>
-  t: TFunction
+  t?: TFunction // 保留用于未来的国际化
 }
 
 const OpenSkillsInstallModal = ({
@@ -15,7 +15,6 @@ const OpenSkillsInstallModal = ({
   loading,
   onRequestClose,
   onInstall,
-  t,
 }: OpenSkillsInstallModalProps) => {
   const [source, setSource] = useState('')
 

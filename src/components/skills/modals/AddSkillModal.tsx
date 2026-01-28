@@ -6,7 +6,7 @@ type AddSkillModalProps = {
   open: boolean
   loading: boolean
   canClose: boolean
-  addModalTab: 'local' | 'git'
+  addModalTab: 'local' | 'git' | 'openskills'
   localPath: string
   localName: string
   gitUrl: string
@@ -15,7 +15,7 @@ type AddSkillModalProps = {
   installedTools: ToolOption[]
   toolStatus: ToolStatusDto | null
   onRequestClose: () => void
-  onTabChange: (tab: 'local' | 'git') => void
+  onTabChange: (tab: 'local' | 'git' | 'openskills') => void
   onLocalPathChange: (value: string) => void
   onPickLocalPath: () => void
   onLocalNameChange: (value: string) => void
@@ -23,6 +23,7 @@ type AddSkillModalProps = {
   onGitNameChange: (value: string) => void
   onSyncTargetChange: (toolId: string, checked: boolean) => void
   onSubmit: () => void
+  onOpenSkillsClick?: () => void
   t: TFunction
 }
 
@@ -47,6 +48,7 @@ const AddSkillModal = ({
   onGitNameChange,
   onSyncTargetChange,
   onSubmit,
+  onOpenSkillsClick,
   t,
 }: AddSkillModalProps) => {
   if (!open) return null
@@ -85,6 +87,13 @@ const AddSkillModal = ({
             >
               {t('gitTab')}
             </button>
+            <button
+              className={`tab-item${addModalTab === 'openskills' ? ' active' : ''}`}
+              type="button"
+              onClick={() => onTabChange('openskills')}
+            >
+              OpenSkills
+            </button>
             <button className="tab-item disabled" type="button" disabled>
               {t('searchTab')}
             </button>
@@ -121,7 +130,7 @@ const AddSkillModal = ({
                 />
               </div>
             </>
-          ) : (
+          ) : addModalTab === 'git' ? (
             <>
               <div className="form-group">
                 <label className="label">{t('repositoryUrl')}</label>
@@ -142,6 +151,23 @@ const AddSkillModal = ({
                 />
               </div>
             </>
+          ) : (
+            // OpenSkills 标签页
+            <div className="form-group">
+              <label className="label">从 OpenSkills 安装</label>
+              <p className="helper-text" style={{ marginBottom: '1rem' }}>
+                OpenSkills 是一个通用的 AI 编程代理技能加载器。点击下方按钮打开安装界面。
+              </p>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={onOpenSkillsClick}
+                disabled={!canClose}
+                style={{ width: '100%' }}
+              >
+                打开 OpenSkills 安装界面
+              </button>
+            </div>
           )}
 
           <div className="form-group">
@@ -181,13 +207,15 @@ const AddSkillModal = ({
           >
             {t('cancel')}
           </button>
-          <button
-            className="btn btn-primary"
-            onClick={onSubmit}
-            disabled={loading}
-          >
-            {addModalTab === 'local' ? t('create') : t('install')}
-          </button>
+          {addModalTab !== 'openskills' && (
+            <button
+              className="btn btn-primary"
+              onClick={onSubmit}
+              disabled={loading}
+            >
+              {addModalTab === 'local' ? t('create') : t('install')}
+            </button>
+          )}
         </div>
       </div>
     </div>

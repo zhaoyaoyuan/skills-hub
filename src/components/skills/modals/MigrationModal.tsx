@@ -9,7 +9,7 @@ type MigrationModalProps = {
   newPath: string
   onRequestClose: () => void
   onMigrate: () => void
-  t: TFunction
+  t?: TFunction // 保留用于未来的国际化
 }
 
 const MigrationModal = ({
@@ -19,7 +19,6 @@ const MigrationModal = ({
   newPath,
   onRequestClose,
   onMigrate,
-  t,
 }: MigrationModalProps) => {
   if (!open) return null
 

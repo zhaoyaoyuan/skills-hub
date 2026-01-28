@@ -101,6 +101,51 @@ impl OpenSkillsAdapter {
         Ok(path)
     }
 
+    /// 扫描已通过 OpenSkills 安装的技能
+    ///
+    /// 返回已安装技能的目录路径列表
+    pub fn scan_installed_skills() -> Result<Vec<String>> {
+        use std::env;
+
+        let home_dir = env::var("HOME")
+            .or_else(|_| env::var("USERPROFILE"))
+            .context("Failed to determine home directory")?;
+
+        let skills_dir = std::path::PathBuf::from(home_dir).join(".agent").join("skills");
+
+        if !skills_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut skills = Vec::new();
+
+        let entries = std::fs::read_dir(&skills_dir)
+            .context("Failed to read skills directory")?;
+
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+
+            // 只包含目录,排除隐藏文件和特殊目录
+            if path.is_dir() {
+                let name = path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+
+                // 跳过隐藏目录和系统目录
+                if !name.starts_with('.') && name != "node_modules" {
+                    skills.push(path.to_string_lossy().to_string());
+                }
+            }
+        }
+
+        // 按名称排序
+        skills.sort();
+
+        log::info!("Scanned {} OpenSkills-installed skills", skills.len());
+        Ok(skills)
+    }
+
     /// 列出已安装的技能
     pub fn list_skills() -> Result<Vec<OpenSkillsSkill>> {
         let output = Command::new("npx")

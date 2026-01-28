@@ -786,11 +786,63 @@ pub async fn check_openskills_available_cmd() -> Result<bool, String> {
         .map_err(|e| e.to_string())
 }
 
-/// 通过 OpenSkills 安装技能
+/// 通过 OpenSkills 安装技能并自动导入到 Skills Hub
 #[tauri::command]
-pub async fn openskills_install_cmd(source: String) -> Result<(), String> {
+pub async fn openskills_install_cmd(
+    app: tauri::AppHandle,
+    store: State<'_, SkillStore>,
+    source: String,
+) -> Result<(), String> {
+    use std::path::Path;
+
+    // 1. 安装技能
     OpenSkillsAdapter::install_skill(&source)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // 2. 扫描已安装的技能
+    let installed_skills = OpenSkillsAdapter::scan_installed_skills()
+        .map_err(|e| e.to_string())?;
+
+    // 3. 获取已存在的技能列表,避免重复导入
+    let existing_skills = get_managed_skills_impl(store.inner())
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|s| s.name)
+        .collect::<std::collections::HashSet<_>>();
+
+    // 4. 导入每个新技能到 Skills Hub 数据库
+    let store = store.inner().clone();
+    for skill_path in installed_skills {
+        let path = Path::new(&skill_path);
+
+        // 获取技能名称
+        let skill_name = path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        if skill_name.is_empty() {
+            continue;
+        }
+
+        // 跳过已经导入的技能
+        if existing_skills.contains(skill_name) {
+            log::info!("Skill '{}' already exists in database, skipping", skill_name);
+            continue;
+        }
+
+        // 导入技能
+        match install_local_skill(&app, &store, path, None) {
+            Ok(_) => {
+                log::info!("Successfully imported skill: {}", skill_name);
+            }
+            Err(err) => {
+                eprintln!("Failed to import skill '{}': {}", skill_name, err);
+                // 不阻塞,继续导入其他技能
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// 同步 AGENTS.md

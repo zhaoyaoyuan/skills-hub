@@ -69,8 +69,12 @@ impl OpenSkillsAdapter {
     /// # 返回
     /// 生成的 AGENTS.md 文件路径
     pub fn sync_agents_md(output_path: Option<&str>) -> Result<String> {
+        // 获取技能存储路径
+        let skills_dir = crate::core::central_repo::get_central_repo_path()?;
+
         let mut cmd = Command::new("npx");
-        cmd.args(&["openskills", "sync", "-y"]);
+        cmd.args(&["openskills", "sync", "-y"])
+            .current_dir(&skills_dir); // 设置工作目录为技能存储目录
 
         if let Some(path) = output_path {
             cmd.args(&["-o", path]);

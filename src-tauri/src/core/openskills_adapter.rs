@@ -22,15 +22,39 @@ pub struct OpenSkillsList {
 }
 
 impl OpenSkillsAdapter {
+    /// 通过登录 shell 解析命令路径，这样 nvm/fnm/volta/官方安装 等任意方式安装的 node 都能被找到
+    fn resolve_via_shell(cmd: &str) -> Option<String> {
+        let script = format!("command -v {} 2>/dev/null || which {}", cmd, cmd);
+        for shell_cmd in &["bash", "zsh"] {
+            if let Ok(output) = std::process::Command::new(shell_cmd)
+                .args(&["-l", "-c", &script])
+                .output()
+            {
+                if output.status.success() {
+                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !path.is_empty() && std::path::Path::new(&path).exists() {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// 查找 node 命令的绝对路径
     ///
-    /// GUI 应用无法访问 shell 环境变量，所以需要手动查找常见的安装位置
+    /// 优先使用登录 shell 的 PATH（支持 nvm/fnm/volta/官方安装/Homebrew），
+    /// 其次尝试常见固定路径（GUI 应用可能拿不到 shell 环境）
     fn find_node_path() -> Option<String> {
+        // 1. 优先通过登录 shell 解析，支持任意安装方式
+        if let Some(path) = Self::resolve_via_shell("node") {
+            return Some(path);
+        }
+
+        // 2. 固定路径：仅列举真实可执行文件路径
         let common_paths = vec![
-            "/opt/homebrew/bin/node",         // Homebrew (Apple Silicon)
-            "/usr/local/bin/node",            // Homebrew (Intel)
-            "/opt/homebrew/Caskroom/nodejs", // Node.js via Homebrew
-            "~/.nvm/versions/node",          // NVM 安装
+            "/opt/homebrew/bin/node",  // Homebrew (Apple Silicon)
+            "/usr/local/bin/node",     // Homebrew (Intel) / 官方安装
         ];
 
         for path in common_paths {
@@ -39,15 +63,19 @@ impl OpenSkillsAdapter {
             }
         }
 
-        // 尝试通过 shell 查找（仅用于开发模式）
-        if let Ok(output) = std::process::Command::new("which")
-            .arg("node")
-            .output()
-        {
-            if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !path.is_empty() {
-                    return Some(path);
+        // 3. 扫描 NVM 目录下的 node 可执行文件
+        if let Ok(home) = std::env::var("HOME") {
+            let nvm_base = std::path::PathBuf::from(home).join(".nvm/versions/node");
+            if nvm_base.exists() {
+                if let Ok(entries) = std::fs::read_dir(&nvm_base) {
+                    let mut versions: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+                    versions.sort_by(|a, b| b.path().cmp(&a.path())); // 尽量用较新版本
+                    for entry in versions {
+                        let node_bin = entry.path().join("bin/node");
+                        if node_bin.exists() {
+                            return Some(node_bin.to_string_lossy().to_string());
+                        }
+                    }
                 }
             }
         }
@@ -57,32 +85,22 @@ impl OpenSkillsAdapter {
 
     /// 查找 openskills 命令的绝对路径
     ///
-    /// GUI 应用无法访问 shell 环境变量，所以需要手动查找常见的安装位置
+    /// 优先使用登录 shell 的 PATH，其次尝试常见固定路径
     fn find_openskills_path() -> Option<String> {
+        // 1. 优先通过登录 shell 解析
+        if let Some(path) = Self::resolve_via_shell("openskills") {
+            return Some(path);
+        }
+
+        // 2. 固定路径
         let common_paths = vec![
-            "/opt/homebrew/bin/openskills",     // Homebrew (Apple Silicon)
-            "/usr/local/bin/openskills",        // Homebrew (Intel)
-            "/opt/homebrew/Caskroom/nodejs",   // Node.js via Homebrew
-            "/usr/local/bin/node",              // Node.js 官方安装
-            "~/.nvm/versions/node",            // NVM 安装
+            "/opt/homebrew/bin/openskills",
+            "/usr/local/bin/openskills",
         ];
 
         for path in common_paths {
             if std::path::Path::new(path).exists() {
                 return Some(path.to_string());
-            }
-        }
-
-        // 尝试通过 shell 查找（仅用于开发模式）
-        if let Ok(output) = std::process::Command::new("which")
-            .arg("openskills")
-            .output()
-        {
-            if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !path.is_empty() {
-                    return Some(path);
-                }
             }
         }
 
@@ -98,7 +116,10 @@ impl OpenSkillsAdapter {
         if node_path.is_none() {
             anyhow::bail!(
                 "无法找到 Node.js。\n\
-                 请确保通过 Homebrew 安装: brew install node"
+                 请安装 Node.js（任选一种）：\n\
+                 - 官网安装：https://nodejs.org/\n\
+                 - Homebrew：brew install node\n\
+                 - NVM：nvm install --lts"
             );
         }
 
@@ -290,8 +311,12 @@ impl OpenSkillsAdapter {
 
     /// 列出已安装的技能
     pub fn list_skills() -> Result<Vec<OpenSkillsSkill>> {
-        let output = Command::new("npx")
-            .args(&["openskills", "list"])
+        let node_cmd = Self::find_node_path().ok_or_else(|| anyhow::anyhow!("无法找到 Node.js"))?;
+        let openskills_cmd = Self::find_openskills_path().ok_or_else(|| anyhow::anyhow!("无法找到 openskills"))?;
+
+        let output = Command::new(&node_cmd)
+            .arg(&openskills_cmd)
+            .arg("list")
             .output()
             .context("Failed to list OpenSkills")?;
 
@@ -312,16 +337,17 @@ impl OpenSkillsAdapter {
     /// # 参数
     /// * `names` - 可选的技能名称列表（None 表示更新所有）
     pub fn update_skills(names: Option<Vec<String>>) -> Result<()> {
-        let mut cmd = Command::new("npx");
-        cmd.args(&["openskills", "update"]);
+        let node_cmd = Self::find_node_path().ok_or_else(|| anyhow::anyhow!("无法找到 Node.js"))?;
+        let openskills_cmd = Self::find_openskills_path().ok_or_else(|| anyhow::anyhow!("无法找到 openskills"))?;
 
+        let mut cmd = Command::new(&node_cmd);
+        cmd.arg(&openskills_cmd).arg("update");
         if let Some(names) = names {
             let names_str = names.join(",");
             cmd.arg(&names_str);
         }
 
-        let output = cmd.output()
-            .context("Failed to update OpenSkills")?;
+        let output = cmd.output().context("Failed to update OpenSkills")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -340,8 +366,12 @@ impl OpenSkillsAdapter {
     /// # 返回
     /// 技能的完整内容（SKILL.md）
     pub fn read_skill(name: &str) -> Result<String> {
-        let output = Command::new("npx")
-            .args(&["openskills", "read", name])
+        let node_cmd = Self::find_node_path().ok_or_else(|| anyhow::anyhow!("无法找到 Node.js"))?;
+        let openskills_cmd = Self::find_openskills_path().ok_or_else(|| anyhow::anyhow!("无法找到 openskills"))?;
+
+        let output = Command::new(&node_cmd)
+            .arg(&openskills_cmd)
+            .args(&["read", name])
             .output()
             .context("Failed to read skill")?;
 
@@ -357,8 +387,12 @@ impl OpenSkillsAdapter {
     /// # 参数
     /// * `name` - 技能名称
     pub fn remove_skill(name: &str) -> Result<()> {
-        let output = Command::new("npx")
-            .args(&["openskills", "remove", name])
+        let node_cmd = Self::find_node_path().ok_or_else(|| anyhow::anyhow!("无法找到 Node.js"))?;
+        let openskills_cmd = Self::find_openskills_path().ok_or_else(|| anyhow::anyhow!("无法找到 openskills"))?;
+
+        let output = Command::new(&node_cmd)
+            .arg(&openskills_cmd)
+            .args(&["remove", name])
             .output()
             .context("Failed to remove skill")?;
 
